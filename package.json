@@ -5,6 +5,12 @@
 	"author": "tucker williams",
 	"license": "MIT",
 	"private": true,
+	"scripts": {
+		"start": "yarn components & yarn styles",
+		"components": "BABEL_ENV=test webpack --watch",
+		"styles": "node src/styles.js --watch",
+		"test": "jest"
+	},
 	"dependencies": {
 		"babel-core": "^6.26.0",
 		"babel-loader": "^7.1.2",
@@ -16,9 +22,24 @@
 		"react-dom": "^16.2.0",
 		"webpack": "^3.10.0"
 	},
-	"scripts": {
-		"start": "yarn components & yarn styles",
-		"components": "webpack --watch",
-		"styles": "node src/styles.js --watch"
+	"devDependencies": {
+		"enzyme": "^3.3.0",
+		"enzyme-adapter-react-16": "^1.1.1",
+		"jest": "^22.0.4"
+	},
+	"babel": {
+		"env": {
+			"development": {
+				"presets": ["stage-3", "react", "env"]
+			},
+			"test": {
+				"presets": ["stage-3", "react", "env"]
+			}
+		}
+	},
+	"jest": {
+		"setupFiles": [
+			"<rootDir>/src/tests.js"
+		]
 	}
 }
