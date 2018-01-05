@@ -40,7 +40,6 @@ const promisifyFS = method => {
 };
 
 // wraps some fs methods to return promises
-const readFile = promisifyFS('readFile');
 const readdir = promisifyFS('readdir');
 const lstat = promisifyFS('lstat');
 const rmdir = promisifyFS('rmdir');
@@ -64,6 +63,16 @@ const rmdirIfExists = dir => {
 const writeFile = (file, data) => {
 	return new Promise((resolve, reject) => {
 		fs.writeFile(file, data, err => {
+			if (err) reject(err);
+			else resolve();
+		});
+	});
+};
+
+// wrap stream.write() to return a promise
+const writeToStream = (stream, data) => {
+	return new Promise((resolve, reject) => {
+		stream.write(data, err => {
 			if (err) reject(err);
 			else resolve();
 		});
@@ -101,10 +110,7 @@ const cleanDir = dir => {
 
 // returns a promise that resolves to an array
 // with an object for each item in the directory
-// resembling { location: file path, buffer: file buffer }
-//
-// the file buffer is null if the item is a directory
-// directories are omitted by default
+// resembling { location, isDirectory }
 //
 // options are { includeDirs, omitFIles, filterFiles }
 // filterFiles is a regex that every filename will be
@@ -122,11 +128,10 @@ const getItemsInDir = (dir, options = {}) => {
 					const location = path.resolve(dir, file);
 
 					lstat(path.resolve(dir, file)).then(stat => {
-						if(stat.isFile()) return readFile(location);
-						else if(stat.isDirectory()) resolve({ location, buffer: null });
+						if(stat.isFile()) resolve({ location, isDirectory: false });
+						else if(stat.isDirectory()) resolve({ location, isDirectory: true });
 						else resolve(null);
 					})
-					.then(buffer => { resolve({ location, buffer }); })
 					.catch(err => { reject(err); });
 				});
 			})
@@ -134,14 +139,14 @@ const getItemsInDir = (dir, options = {}) => {
 	})
 	.then(files => {
 		if(options.includeDirs === true) return files.filter(file => file !== null);
-		else if(options.omitFiles === true) return files.filter(file => file !== null && file.buffer === null)
-		else return files.filter(file => file !== null && file.buffer !== null);
+		else if(options.omitFiles === true) return files.filter(file => file !== null && file.isDirectory);
+		else return files.filter(file => file !== null && !file.isDirectory);
 	})
 	.catch(logError);
 };
 
-// gets an array of all scss file buffers in component subdirectories
-const getComponentStyleBuffers = () => {
+// gets an array of all scss files in component subdirectories
+const getComponentStyles = () => {
 	return getItemsInDir(COMPONENTS_DIR, { omitFiles: true }).then(dirs => {
 		return Promise.all(
 			dirs.map(dir => {
@@ -154,52 +159,59 @@ const getComponentStyleBuffers = () => {
 			})
 		)
 		.then(componentStyles => {
-			return Buffer.concat(flatten(componentStyles).map(style => style.buffer));
+			return flatten(componentStyles).map(style => style.location);
 		});
 	});
 };
 
-// gets a concatenated buffer of all scss files in the ./themes/shared directory
-const getSharedStyleBuffers = () => {
+// gets an array of all scss files in the ./themes/shared directory
+const getSharedStyles = () => {
 	return getItemsInDir(COMMON_DIR).then(sharedStyles => {
-		return Buffer.concat(sharedStyles.map(style => style.buffer));
+		return flatten(sharedStyles).map(style => style.location);
 	});
 };
 
-// gets an array of all scss file buffers that will be common to every theme
-const getCommonStyleBuffers = () => {
-	return Promise.all([getComponentStyleBuffers(), getSharedStyleBuffers()]).then(commonStyleBuffers => {
-		return { componentStylesBuffer: commonStyleBuffers[0], sharedStylesBuffer: commonStyleBuffers[1] };
+// gets an array of all scss files that will be common to every theme (i.e. all component styles and all shared styles)
+const getCommonStyles = () => {
+	return Promise.all([getSharedStyles(), getComponentStyles()]).then(commonStyles => {
+		return { sharedStyles: commonStyles[0], componentStyles: commonStyles[1] };
 	});
-}
+};
 
 // writes the theme specific css and scss
 const writeThemeStyles = () => {
-	return getCommonStyleBuffers().then(commonStyleBuffers => {
+	return getCommonStyles().then(commonStyles => {
 		return new Promise((resolve, reject) => {
 			getItemsInDir(THEMES_DIR, { filterFiles: /\.theme\.scss/ }).then(themes => {
-				resolve({ themes, commonStyleBuffers });
+				resolve({ themes, commonStyles });
 			})
 			.catch(err => { reject(err) });
 		});
 	})
-	.then(scssAll => {
-		const writePromises = [];
+	.then(allStyles => {
+		const renderPromises = [];
 
-		scssAll.themes.forEach(theme => {
-			const themeBuffer = Buffer.concat([
-				scssAll.commonStyleBuffers.sharedStylesBuffer,
-				theme.buffer,
-				scssAll.commonStyleBuffers.componentStylesBuffer,
-			]);
-
+		allStyles.themes.forEach(theme => {
+			const writePromises = [];
 			const themename = theme.location.match(/themes\/(.*?)\.theme.scss/);
 			const filename = `${LIB_NAME}.${themename[1]}.`;
 			const scssFile = path.resolve(DIST_DIR_SCSS, filename) + 'scss';
 			const cssFile = path.resolve(DIST_DIR_CSS, filename) + 'css';
+			const scssFileStream = fs.createWriteStream(scssFile);
+			const themeStyles = [
+				...allStyles.commonStyles.sharedStyles,
+				theme.location,
+				...allStyles.commonStyles.componentStyles
+			];
 
-			writePromises.push(
-				writeFile(scssFile, themeBuffer).then(() => {
+			themeStyles.forEach(style => {
+				writePromises.push(
+					writeToStream(scssFileStream, `@import '${style}';\n`).catch(logError)
+				);
+			});
+
+			renderPromises.push(
+				Promise.all(writePromises).then(() => {
 					console.log('rendered', '\x1b[32m', `${filename}scss`, '\x1b[0m', 'to', '\x1b[33m', DIST_DIR_SCSS, '\x1b[0m');
 
 					return renderSass({
@@ -221,7 +233,7 @@ const writeThemeStyles = () => {
 			);
 		});
 
-		return Promise.all(writePromises);
+		return Promise.all(renderPromises);
 	})
 	.catch(logError);
 };
