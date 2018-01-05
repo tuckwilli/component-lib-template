@@ -106,7 +106,7 @@ const cleanDir = dir => {
 	})
 	.then(() => { return mkdir(dir); })
 	.catch(logError);
-}
+};
 
 // returns a promise that resolves to an array
 // with an object for each item in the directory
