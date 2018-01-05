@@ -201,7 +201,7 @@ const writeThemeStyles = () => {
 			const themeStyles = [
 				...allStyles.commonStyles.sharedStyles,
 				theme.location,
-				...allStyles.commonStyles.componentStyles
+				...allStyles.commonStyles.componentStyles,
 			];
 
 			themeStyles.forEach(style => {
@@ -211,6 +211,8 @@ const writeThemeStyles = () => {
 					writeToStream(scssFileStream, `@import '${relativeStyle}';\n`).catch(logError)
 				);
 			});
+
+			scssFileStream.end();
 
 			renderPromises.push(
 				Promise.all(writePromises).then(() => {
@@ -242,6 +244,7 @@ const writeThemeStyles = () => {
 
 const compile = () => {
 	const startTime = (new Date()).getTime();
+	
 	return Promise.all([cleanDir(DIST_DIR_SCSS), cleanDir(DIST_DIR_CSS)]).then(() => {
 		return writeThemeStyles();
 	})
