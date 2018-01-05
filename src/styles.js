@@ -205,8 +205,10 @@ const writeThemeStyles = () => {
 			];
 
 			themeStyles.forEach(style => {
+				const relativeStyle = path.relative(DIST_DIR_SCSS, style);
+
 				writePromises.push(
-					writeToStream(scssFileStream, `@import '${style}';\n`).catch(logError)
+					writeToStream(scssFileStream, `@import '${relativeStyle}';\n`).catch(logError)
 				);
 			});
 
