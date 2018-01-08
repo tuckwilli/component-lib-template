@@ -7,7 +7,7 @@
 	"private": true,
 	"scripts": {
 		"start": "yarn components & yarn styles",
-		"components": "BABEL_ENV=test webpack --watch",
+		"components": "webpack --watch",
 		"styles": "node src/styles.js --watch",
 		"test": "jest"
 	},
@@ -30,9 +30,6 @@
 	"babel": {
 		"env": {
 			"development": {
-				"presets": ["stage-3", "react", "env"]
-			},
-			"test": {
 				"presets": ["stage-3", "react", "env"]
 			}
 		}
